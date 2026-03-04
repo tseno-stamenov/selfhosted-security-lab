@@ -1,0 +1,73 @@
+name: Security scans (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_path:
+        description: "Path to scan (default: vendor)"
+        required: false
+        default: "vendor"
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    name: Trivy (fs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan (JSON)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.target_path }}
+          format: json
+          output: trivy-report.json
+
+      - name: Upload Trivy report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
+  gitleaks:
+    name: Gitleaks (fs, JSON)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sudo bash
+
+      - name: Run Gitleaks report
+        run: |
+          gitleaks detect --source "${{ inputs.target_path }}" --report-format json --report-path gitleaks-report.json || true
+
+      - name: Upload Gitleaks report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  trufflehog:
+    name: TruffleHog (filesystem, JSON)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run TruffleHog report
+        run: |
+          trufflehog filesystem "${{ inputs.target_path }}" --json > trufflehog-report.json || true
+
+      - name: Upload TruffleHog report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog-report
+          path: trufflehog-report.json
